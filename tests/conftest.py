@@ -1,6 +1,17 @@
 """Shared test fixtures: seeded sample data, isolated SQLite DB, test client."""
 from __future__ import annotations
 
+import os
+import tempfile
+
+# The app module builds the app (and its database) at import time, so point
+# it at a throwaway database before that import. Otherwise test collection
+# would create the real ./data/meridian.db in the checkout.
+os.environ.setdefault(
+    "MERIDIAN_DATABASE_URL",
+    f"sqlite:///{tempfile.mkdtemp(prefix='meridian-test-')}/import.db",
+)
+
 import pytest
 from fastapi.testclient import TestClient
 

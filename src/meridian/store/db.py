@@ -17,8 +17,17 @@ def init_db(database_url: str) -> None:
     kwargs: dict = {}
     if database_url.startswith("sqlite"):
         path = urlparse(database_url).path
-        if path and path not in (":memory:", "/:memory:"):
-            os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+        if path and ":memory:" not in path:
+            # Mirror SQLAlchemy's SQLite convention: a single leading slash
+            # marks a path relative to the working directory
+            # ("sqlite:///./x" or "sqlite:///x"); only a double slash is
+            # absolute ("sqlite:////abs/x"). Without this, urlparse's
+            # absolute-looking path makes makedirs target the filesystem
+            # root (e.g. "/data"), which fails for non-root users.
+            fs_path = path[1:] if path.startswith("/") else path
+            parent = os.path.dirname(os.path.abspath(fs_path))
+            if parent:
+                os.makedirs(parent, exist_ok=True)
         kwargs["connect_args"] = {"check_same_thread": False}
         if ":memory:" in database_url:
             kwargs["poolclass"] = StaticPool
