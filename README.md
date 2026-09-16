@@ -1,0 +1,112 @@
+# Meridian
+
+Agentic AI operations layer for supply chains. Meridian runs a pipeline of specialized planning agents (demand forecasting, inventory optimization, procurement, risk) over your catalog, produces replenishment plans and draft purchase orders, and routes anything above a value threshold to a human for approval.
+
+The planning core is deterministic: the same inputs always produce the same plan. An LLM is optional and only writes the narrative summary. If the model is unreachable, the run still completes.
+
+## Quickstart
+
+Local (SQLite, no Docker):
+
+```bash
+pip install -e ".[dev]"
+python -m meridian seed --data-dir data   # sample catalog (already committed, optional)
+python -m meridian serve --reload         # API + dashboard at http://localhost:8000
+```
+
+Run one planning cycle:
+
+```bash
+python -m meridian run
+curl -X POST http://localhost:8000/v1/runs
+```
+
+Docker (API + Postgres):
+
+```bash
+docker compose up --build
+# http://localhost:8000
+```
+
+Open the dashboard, press **Run planning**, review the proposed orders, and approve or reject them. Approvals are recorded in the audit trail.
+
+## How it works
+
+One planning run executes four agents in a fixed order:
+
+1. **Forecaster** predicts demand per SKU (Holt's linear trend for SKUs with 28+ days of history, moving average otherwise).
+2. **Inventory** turns the forecast into order quantities using safety stock, reorder point, and service-level math.
+3. **Risk** scans for demand anomalies and flags SKUs whose cover falls below supplier lead time.
+4. **Procurement** scores suppliers per SKU, drafts purchase orders grouped by supplier, and applies policy guardrails: unapproved suppliers are blocked, oversized POs are split, and anything at or above the approval threshold needs a human.
+
+Every decision is persisted with its rationale, the policy verdict, and an audit record. See `docs/architecture.md` and `docs/agents.md`.
+
+## Project layout
+
+```
+src/meridian/
+  agents/        forecaster, inventory, procurement, risk, orchestrator
+  api/           FastAPI app, routes, schemas
+  core/          config, structured logging, policy guardrails, audit helpers
+  data/          CSV loader + seeded sample-data generator
+  llm/           optional OpenAI-compatible client (summaries only)
+  store/         SQLAlchemy models + repository
+web/             operations dashboard (no build step)
+data/            sample catalog (12 SKUs, 180 days of demand)
+deploy/k8s/      Kubernetes deployment + service
+docs/            architecture, agents, API, deployment, security, evaluation
+tests/           unit + API tests
+```
+
+## Configuration
+
+All settings come from environment variables prefixed with `MERIDIAN_` (see `.env.example`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MERIDIAN_DATABASE_URL` | `sqlite:///./data/meridian.db` | Postgres URL for production |
+| `MERIDIAN_LLM_PROVIDER` | `none` | `openai-compatible` enables narrative summaries |
+| `MERIDIAN_MAX_SINGLE_PO_VALUE` | `25000` | Orders above this are blocked and split |
+| `MERIDIAN_APPROVAL_THRESHOLD` | `5000` | Orders at/above this need human approval |
+| `MERIDIAN_DEFAULT_SERVICE_LEVEL` | `0.95` | Target fill rate for safety stock |
+| `MERIDIAN_FORECAST_HORIZON_DAYS` | `30` | Planning horizon |
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health`, `/ready`, `/metrics` | Ops endpoints (metrics are Prometheus-formatted) |
+| POST | `/v1/runs` | Execute a planning run |
+| GET | `/v1/runs`, `/v1/runs/{id}` | Run history and detail |
+| GET | `/v1/decisions` | Proposed orders (`?status=needs_approval`) |
+| POST | `/v1/decisions/{id}/approve`, `/reject` | Human-in-the-loop gate |
+| GET/POST | `/v1/purchase-orders…` | Draft POs and PO approval |
+| GET | `/v1/forecast/{sku}` | Per-SKU forecast |
+| GET | `/v1/skus`, `/v1/inventory`, `/v1/suppliers`, `/v1/audit` | Catalog and audit reads |
+
+Full reference in `docs/api.md`.
+
+## Testing
+
+```bash
+pytest -q        # unit + API tests
+ruff check src tests
+```
+
+Tests cover the planning math with hand-checked values, the policy guardrails, anomaly detection on injected spikes, and the full approve/reject flow through the API.
+
+## Deployment
+
+`docker-compose.yml` runs the API against Postgres. `deploy/k8s/` has a deployment (2 replicas, non-root, probes, resource limits) and a ClusterIP service. The image is multi-stage and ships no dev dependencies. Notes on scaling, secrets, and the Postgres migration path are in `docs/deployment.md`; threat model and data handling in `docs/security.md`.
+
+## Roadmap
+
+- Background worker (Celery/arq) for long runs instead of request-scoped execution
+- Multi-warehouse allocation and transfer recommendations
+- Supplier lead-time learning from PO actuals
+- Forecast model selection per SKU (auto-ARIMA/ETS) with backtest reports
+- SSO/OIDC and role-based approval limits
+
+## License
+
+MIT. See `LICENSE`.

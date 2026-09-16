@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+data/meridian.db
+*.db-journal
+.DS_Store/
+.idea/
+.vscode/
+reports/

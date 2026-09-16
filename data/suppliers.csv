@@ -1,0 +1,5 @@
+supplier_id,name,approved,reliability
+SUP-A,Acme Industrial Supply,true,0.96
+SUP-B,Bharat Components Ltd,true,0.88
+SUP-C,Continental Parts Co,true,0.91
+SUP-D,Discount Direct Wholesale,false,0.62

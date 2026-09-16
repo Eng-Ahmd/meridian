@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridian — Supply Chain Planning</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Meridian</div>
+  <div class="sub">Agentic planning for supply chains</div>
+  <div class="spacer"></div>
+  <button id="run-btn" class="btn primary">Run planning</button>
+</header>
+
+<main>
+  <section id="summary" class="card hidden">
+    <h2>Latest run</h2>
+    <p id="narrative" class="narrative"></p>
+    <div id="kpis" class="kpis"></div>
+  </section>
+
+  <section class="card">
+    <h2>Pending approvals</h2>
+    <p class="hint">Orders at or above the approval threshold wait for a human before anything is released.</p>
+    <table id="approvals-table">
+      <thead><tr>
+        <th>ID</th><th>SKU</th><th>Qty</th><th>Supplier</th><th>Total</th><th>Rationale</th><th></th>
+      </tr></thead>
+      <tbody><tr><td colspan="7" class="empty">No pending approvals.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Inventory</h2>
+    <table id="inventory-table">
+      <thead><tr>
+        <th>SKU</th><th>Name</th><th>Category</th><th>On hand</th><th>On order</th><th>Lead time</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Run history</h2>
+    <table id="runs-table">
+      <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Orders</th><th>Spend</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

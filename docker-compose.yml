@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      MERIDIAN_DATABASE_URL: postgresql+psycopg2://meridian:meridian@db:5432/meridian
+      MERIDIAN_DATA_DIR: /app/data
+      MERIDIAN_LOG_LEVEL: INFO
+    volumes:
+      - ./data:/app/data:ro
+
+volumes:
+  pgdata:

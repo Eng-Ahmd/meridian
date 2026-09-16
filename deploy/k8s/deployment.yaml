@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meridian
+  labels:
+    app: meridian
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: meridian
+  template:
+    metadata:
+      labels:
+        app: meridian
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: api
+          image: meridian:0.1.0
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MERIDIAN_ENVIRONMENT
+              value: production
+            - name: MERIDIAN_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: meridian-secrets
+                  key: database-url
+            - name: MERIDIAN_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: meridian-secrets
+                  key: llm-api-key
+                  optional: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            periodSeconds: 10

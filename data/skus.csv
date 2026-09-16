@@ -1,0 +1,13 @@
+sku_id,name,category,unit_cost,lead_time_days
+SKU-1001,"Hex bolt M8x40, zinc",fasteners,0.42,9
+SKU-1002,"Hex bolt M10x50, zinc",fasteners,0.61,9
+SKU-1003,Nylon lock nut M8,fasteners,0.18,12
+SKU-1004,Flat washer M8,fasteners,0.06,7
+SKU-2001,Temp sensor probe PT100,sensors,18.50,14
+SKU-2002,Pressure transducer 0-10bar,sensors,64.00,21
+SKU-2003,Proximity switch inductive,sensors,12.75,11
+SKU-2004,Level float switch,sensors,9.20,10
+SKU-3001,Corrugated box 400x300x200,packaging,1.15,5
+SKU-3002,Stretch film 500mm,packaging,6.80,6
+SKU-3003,Pallet EUR EPAL,packaging,14.20,8
+SKU-3004,Bubble wrap roll 750mm,packaging,11.40,6
