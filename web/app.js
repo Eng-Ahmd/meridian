@@ -7,98 +7,153 @@ async function api(path, opts) {
   return res.json();
 }
 
-const money = (n) =>
-  n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const moneyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (n) => {
+  const v = Number(n);
+  return Number.isFinite(v) ? moneyFmt.format(v) : "—";
+};
 
 function pill(status) {
-  return `<span class="pill ${status}">${status.replace(/_/g, " ")}</span>`;
+  const el = document.createElement("span");
+  el.className = `pill ${status}`;
+  el.textContent = String(status).replace(/_/g, " ");
+  return el;
+}
+
+function td(text) {
+  const c = document.createElement("td");
+  c.textContent = text ?? "";
+  return c;
 }
 
 async function loadSummary() {
-  const runs = await api("/v1/runs?limit=1");
-  if (!runs.length) return;
-  const latest = runs[0];
-  if (latest.status !== "succeeded") return;
+  // Latest *succeeded* run: a failed run carries only {error} and must not
+  // break the dashboard (P1-10).
+  const runs = await api("/v1/runs?limit=20");
+  const latest = runs.find(
+    (r) => r.status === "succeeded" && r.summary && r.summary.skus_planned !== undefined
+  );
+  if (!latest) return;
   const s = latest.summary;
   document.getElementById("summary").classList.remove("hidden");
   document.getElementById("narrative").textContent = s.narrative || "";
   const kpis = [
-    [s.skus_planned, "SKUs planned"],
-    [s.orders_proposed, "Orders proposed"],
+    [String(s.skus_planned ?? "—"), "SKUs planned"],
+    [String(s.orders_proposed ?? "—"), "Orders proposed"],
     [money(s.total_proposed_spend), "Proposed spend"],
-    [s.pos_needing_approval, "POs need approval"],
-    [s.skus_at_stockout_risk.length, "At stockout risk"],
+    [String(s.pos_needing_approval ?? "—"), "POs need approval"],
+    [String((s.skus_at_stockout_risk || []).length), "At stockout risk"],
   ];
-  document.getElementById("kpis").innerHTML = kpis
-    .map(([v, l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`)
-    .join("");
+  const box = document.getElementById("kpis");
+  box.replaceChildren();
+  for (const [v, l] of kpis) {
+    const card = document.createElement("div");
+    card.className = "kpi";
+    const vv = document.createElement("div");
+    vv.className = "v";
+    vv.textContent = v;
+    const ll = document.createElement("div");
+    ll.className = "l";
+    ll.textContent = l;
+    card.append(vv, ll);
+    box.append(card);
+  }
 }
 
 async function loadApprovals() {
   const rows = await api("/v1/decisions?status=needs_approval");
   const tb = document.querySelector("#approvals-table tbody");
+  tb.replaceChildren();
   if (!rows.length) {
-    tb.innerHTML = `<tr><td colspan="7" class="empty">No pending approvals.</td></tr>`;
+    const tr = document.createElement("tr");
+    const c = document.createElement("td");
+    c.colSpan = 7;
+    c.className = "empty";
+    c.textContent = "No pending approvals.";
+    tr.append(c);
+    tb.append(tr);
     return;
   }
-  tb.innerHTML = rows
-    .map(
-      (d) => `<tr>
-        <td>${d.id}</td>
-        <td>${d.sku_id}</td>
-        <td>${d.quantity}</td>
-        <td>${d.extra.supplier_id || ""}</td>
-        <td>${money(d.total_cost)}</td>
-        <td>${d.rationale}</td>
-        <td style="white-space:nowrap">
-          <button class="btn approve" data-act="approve" data-id="${d.id}">Approve</button>
-          <button class="btn reject" data-act="reject" data-id="${d.id}">Reject</button>
-        </td>
-      </tr>`
-    )
-    .join("");
-  tb.querySelectorAll("button").forEach((b) =>
-    b.addEventListener("click", () => decide(b.dataset.id, b.dataset.act))
-  );
+  for (const d of rows) {
+    const tr = document.createElement("tr");
+    tr.append(
+      td(String(d.id)),
+      td(d.sku_id),
+      td(String(d.quantity)),
+      td(d.extra?.supplier_id ?? ""),
+      td(money(d.total_cost)),
+      td(d.rationale)
+    );
+    const act = document.createElement("td");
+    act.style.whiteSpace = "nowrap";
+    for (const [label, cls, name] of [
+      ["Approve", "btn approve", "approve"],
+      ["Reject", "btn reject", "reject"],
+    ]) {
+      const b = document.createElement("button");
+      b.className = cls;
+      b.textContent = label;
+      b.addEventListener("click", () => decide(d.id, name));
+      act.append(b);
+    }
+    tr.append(act);
+    tb.append(tr);
+  }
 }
 
 async function decide(id, act) {
   const by = prompt("Your name (recorded in the audit trail):", "planner");
-  if (!by) return;
+  if (!by || !by.trim()) return;
   await api(`/v1/decisions/${id}/${act}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ decided_by: by }),
+    body: JSON.stringify({ decided_by: by.trim() }),
   });
   await loadApprovals();
 }
 
 async function loadInventory() {
   const rows = await api("/v1/inventory");
-  document.querySelector("#inventory-table tbody").innerHTML = rows
-    .map(
-      (r) => `<tr>
-        <td>${r.sku_id}</td><td>${r.name}</td><td>${r.category}</td>
-        <td>${r.on_hand}</td><td>${r.on_order}</td><td>${r.lead_time_days}d</td>
-      </tr>`
-    )
-    .join("");
+  const tb = document.querySelector("#inventory-table tbody");
+  tb.replaceChildren();
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    tr.append(
+      td(r.sku_id),
+      td(r.name),
+      td(r.category),
+      td(String(r.on_hand ?? "")),
+      td(String(r.on_order ?? "")),
+      td(r.lead_time_days != null ? `${r.lead_time_days}d` : "")
+    );
+    tb.append(tr);
+  }
 }
 
 async function loadRuns() {
   const runs = await api("/v1/runs?limit=10");
-  document.querySelector("#runs-table tbody").innerHTML = runs
-    .map((r) => {
-      const s = r.summary || {};
-      return `<tr>
-        <td><code>${r.id}</code></td>
-        <td>${pill(r.status)}</td>
-        <td>${new Date(r.started_at).toLocaleString()}</td>
-        <td>${s.orders_proposed ?? "-"}</td>
-        <td>${s.total_proposed_spend != null ? money(s.total_proposed_spend) : "-"}</td>
-      </tr>`;
-    })
-    .join("");
+  const tb = document.querySelector("#runs-table tbody");
+  tb.replaceChildren();
+  for (const r of runs) {
+    const s = r.summary || {};
+    const tr = document.createElement("tr");
+    const idc = document.createElement("td");
+    const code = document.createElement("code");
+    code.textContent = r.id;
+    idc.append(code);
+    const stc = document.createElement("td");
+    stc.append(pill(r.status));
+    const dtc = document.createElement("td");
+    dtc.textContent = new Date(r.started_at).toLocaleString();
+    tr.append(
+      idc,
+      stc,
+      dtc,
+      td(s.orders_proposed ?? "-"),
+      td(s.total_proposed_spend != null ? money(s.total_proposed_spend) : "-")
+    );
+    tb.append(tr);
+  }
 }
 
 document.getElementById("run-btn").addEventListener("click", async (e) => {

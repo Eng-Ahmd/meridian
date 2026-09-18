@@ -2,6 +2,7 @@ LICENSE
 README.md
 pyproject.toml
 src/meridian/__init__.py
+src/meridian/__main__.py
 src/meridian/cli.py
 src/meridian.egg-info/PKG-INFO
 src/meridian.egg-info/SOURCES.txt

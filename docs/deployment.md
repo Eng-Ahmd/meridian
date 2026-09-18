@@ -3,10 +3,10 @@
 ## Docker Compose (recommended for evaluation)
 
 ```bash
-docker compose up --build
+MERIDIAN_DB_PASSWORD='<strong, unique password>' docker compose up --build
 ```
 
-This starts Postgres 16 and the API (2-stage image, non-root user, health check). The API waits for the database to be healthy before starting. Data persists in the `pgdata` volume. The catalog CSVs are mounted read-only from `./data`.
+This starts Postgres 16 and the API (2-stage image, non-root user, health check). `MERIDIAN_DB_PASSWORD` is required: compose fails fast with a clear message when it is missing, and the value is never baked into the image. The API waits for the database to be healthy before starting. Data persists in the `pgdata` volume. The catalog CSVs are mounted read-only from `./data`.
 
 ## Kubernetes
 

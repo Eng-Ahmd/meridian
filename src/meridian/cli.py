@@ -20,23 +20,26 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    from meridian.agents.orchestrator import run_planning
+    from meridian.agents.orchestrator import plan_from_catalog
     from meridian.core.config import get_settings
     from meridian.core.logging import configure_logging
-    from meridian.data.loader import load_data
+    from meridian.data.loader import CatalogError
     from meridian.store.db import init_db
 
     settings = get_settings()
     configure_logging(settings.log_level)
     init_db(settings.database_url)
-    data = load_data(settings.data_dir)
-    summary = run_planning(
-        settings=settings,
-        data=data,
-        horizon_days=args.horizon,
-        service_level=args.service_level,
-        requested_by="cli",
-    )
+    try:
+        summary = plan_from_catalog(
+            settings=settings,
+            data_dir=settings.data_dir,
+            horizon_days=args.horizon,
+            service_level=args.service_level,
+            requested_by="cli",
+        )
+    except CatalogError as exc:
+        print(f"catalog error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
     print(json.dumps(summary, indent=2, default=str))
 
 

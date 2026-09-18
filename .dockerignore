@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+.pytest_cache/
+.ruff_cache/
+.env
+meridian-audit-scratch/
+data/meridian.db

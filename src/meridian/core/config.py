@@ -1,6 +1,8 @@
 """Application configuration. Everything is overridable via environment variables."""
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,7 +11,7 @@ class Settings(BaseSettings):
 
     app_name: str = "meridian"
     environment: str = "development"
-    log_level: str = "INFO"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     database_url: str = "sqlite:///./data/meridian.db"
     data_dir: str = "data"
@@ -27,8 +29,6 @@ class Settings(BaseSettings):
     default_service_level: float = 0.95
     forecast_horizon_days: int = 30
     review_period_days: int = 7
-
-    seed_sample_data: bool = True
 
 
 def get_settings() -> Settings:

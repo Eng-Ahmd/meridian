@@ -17,7 +17,8 @@ def test_planning_run_end_to_end(client):
     run_id = summary["run_id"]
     detail = client.get(f"/v1/runs/{run_id}").json()
     assert detail["status"] == "succeeded"
-    assert len(detail["decisions"]) == summary["orders_proposed"]
+    # Blocked proposals are persisted as decisions too (P1-2).
+    assert len(detail["decisions"]) == summary["orders_proposed"] + summary["orders_blocked"]
     assert len(detail["purchase_orders"]) == summary["purchase_orders_drafted"]
 
 
@@ -50,7 +51,17 @@ def test_purchase_order_approval(client):
     run_id = client.post("/v1/runs", json={}).json()["run_id"]
     pos = client.get(f"/v1/purchase-orders?run_id={run_id}").json()
     assert pos, "expected draft purchase orders"
-    po_id = pos[0]["id"]
+    po = pos[0]
+    # The P0-1 gate requires every linked decision to be approved first.
+    detail = client.get(f"/v1/runs/{run_id}").json()
+    line_skus = {line["sku_id"] for line in po["lines"]}
+    for d in detail["decisions"]:
+        if d["sku_id"] in line_skus and d["status"] == "needs_approval":
+            r = client.post(
+                f"/v1/decisions/{d['id']}/approve", json={"decided_by": "tester"}
+            )
+            assert r.status_code == 200
+    po_id = po["id"]
     r = client.post(f"/v1/purchase-orders/{po_id}/approve", json={"approved_by": "tester"})
     assert r.status_code == 200
     assert r.json()["status"] == "approved"

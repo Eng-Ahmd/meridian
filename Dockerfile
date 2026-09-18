@@ -1,14 +1,17 @@
 # Multi-stage build: slim runtime image, non-root user, health check.
-FROM python:3.12-slim AS builder
+# Base image is pinned to a patch release (no floating minor tag). Re-pin to a
+# digest at release time (`docker buildx imagetools inspect`) for immutability.
+FROM python:3.12.7-slim AS builder
 WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN pip install --no-cache-dir --prefix=/install .
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12.7-slim AS runtime
+# No credentialed MERIDIAN_DATABASE_URL default here: secrets must arrive via
+# the environment (compose / k8s Secret), never baked into an image layer.
 ENV PYTHONUNBUFFERED=1 \
     MERIDIAN_ENVIRONMENT=production \
-    MERIDIAN_DATABASE_URL=postgresql+psycopg2://meridian:meridian@db:5432/meridian \
     MERIDIAN_DATA_DIR=/app/data
 WORKDIR /app
 COPY --from=builder /install /usr/local

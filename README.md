@@ -24,7 +24,7 @@ curl -X POST http://localhost:8000/v1/runs
 Docker (API + Postgres):
 
 ```bash
-docker compose up --build
+MERIDIAN_DB_PASSWORD='<strong, unique password>' docker compose up --build
 # http://localhost:8000
 ```
 
@@ -66,7 +66,7 @@ All settings come from environment variables prefixed with `MERIDIAN_` (see `.en
 |---|---|---|
 | `MERIDIAN_DATABASE_URL` | `sqlite:///./data/meridian.db` | Postgres URL for production |
 | `MERIDIAN_LLM_PROVIDER` | `none` | `openai-compatible` enables narrative summaries |
-| `MERIDIAN_MAX_SINGLE_PO_VALUE` | `25000` | Orders above this are blocked and split |
+| `MERIDIAN_MAX_SINGLE_PO_VALUE` | `25000` | Orders above this are blocked for human review |
 | `MERIDIAN_APPROVAL_THRESHOLD` | `5000` | Orders at/above this need human approval |
 | `MERIDIAN_DEFAULT_SERVICE_LEVEL` | `0.95` | Target fill rate for safety stock |
 | `MERIDIAN_FORECAST_HORIZON_DAYS` | `30` | Planning horizon |

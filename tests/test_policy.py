@@ -64,4 +64,6 @@ def test_excessive_cover_flagged_but_allowed():
         unit_cost=100.0, days_of_cover_after_order=60.0, planning_horizon_days=30,
     )
     assert v.allowed is True
-    assert any("1.5x" in r for r in v.reasons)
+    # Advisory wording only (P1-1): the planner never trims quantities.
+    assert any("review advised" in r for r in v.reasons)
+    assert not any("trimmed" in r for r in v.reasons)

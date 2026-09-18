@@ -44,12 +44,13 @@ def evaluate_order(
             needs_approval=False,
             reasons=[
                 f"order value ${total:,.2f} exceeds the single-PO cap "
-                f"${settings.max_single_po_value:,.2f}; split across multiple POs"
+                f"${settings.max_single_po_value:,.2f}; escalated for review"
             ],
         )
     if days_of_cover_after_order > planning_horizon_days * 1.5:
+        days = int(days_of_cover_after_order)
         reasons.append(
-            "order would cover more than 1.5x the planning horizon; quantity trimmed by planner"
+            f"quantity covers ~{days} days of forecast horizon; review advised"
         )
 
     needs_approval = total >= settings.approval_threshold

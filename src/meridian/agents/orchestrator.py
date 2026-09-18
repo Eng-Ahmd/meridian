@@ -3,6 +3,11 @@
 Pipeline order is fixed: forecast -> inventory plan -> risk scan -> procurement.
 Procurement reads the inventory findings via the shared context params. Every
 run, decision, and purchase order is written to the store with an audit trail.
+
+Load flow (P0-6): the run row is created *first* with status "running", and only
+then is the catalog loaded. A catalog failure flips the run to "failed" with an
+audit event and raises :class:`CatalogError` (mapped to HTTP 422) — no load
+failure escapes untracked.
 """
 from __future__ import annotations
 
@@ -18,6 +23,7 @@ from meridian.agents.risk import RiskAgent
 from meridian.core.audit import audit_record, inputs_hash
 from meridian.core.config import Settings
 from meridian.core.logging import get_logger
+from meridian.data.loader import CatalogError, hash_catalog_files, load_data
 from meridian.llm.summaries import summarize_run
 from meridian.store import repository as repo
 
@@ -34,45 +40,45 @@ def _rationale(p: dict) -> str:
     return base
 
 
-def run_planning(
+def _resolve_params(
+    settings: Settings,
+    horizon_days: int | None,
+    service_level: float | None,
+    review_period_days: int | None,
+) -> dict[str, Any]:
+    return {
+        "horizon_days": horizon_days or settings.forecast_horizon_days,
+        "service_level": service_level or settings.default_service_level,
+        "review_period_days": review_period_days or settings.review_period_days,
+    }
+
+
+def plan_from_catalog(
     *,
     settings: Settings,
-    data: dict[str, Any],
+    data_dir: str,
     horizon_days: int | None = None,
     service_level: float | None = None,
     review_period_days: int | None = None,
     requested_by: str = "api",
 ) -> dict[str, Any]:
+    """Create the run row first, then load the catalog, then plan.
+
+    Catalog failures are recorded on the run (status "failed" + audit event)
+    and re-raised as :class:`CatalogError` for the caller to map to HTTP 422
+    (API) or exit code 2 (CLI).
+    """
     run_id = f"run-{uuid.uuid4().hex[:12]}"
     started = datetime.now(UTC)
-    params = {
-        "horizon_days": horizon_days or settings.forecast_horizon_days,
-        "service_level": service_level or settings.default_service_level,
-        "review_period_days": review_period_days or settings.review_period_days,
-    }
+    params = _resolve_params(settings, horizon_days, service_level, review_period_days)
     log.info("planning run started", extra={"run_id": run_id})
 
-    ctx = PlanningContext(
-        skus=data["skus"],
-        suppliers=data["suppliers"],
-        inventory=data["inventory"],
-        demand_history=data["demand_history"],
-        sku_suppliers=data["sku_suppliers"],
-        params=dict(params),
-    )
-
-    first_series = next(iter(data["demand_history"].values()), [])
-    run_inputs = {
-        "skus": sorted(data["skus"]),
-        "params": params,
-        "demand_days": len(first_series),
-    }
     repo.create_run(
         run_id=run_id,
         params=params,
         status="running",
         started_at=started,
-        inputs_hash=inputs_hash(run_inputs),
+        inputs_hash="",
     )
     repo.add_audit(
         **audit_record(
@@ -82,6 +88,82 @@ def run_planning(
             entity_id=run_id,
             details={"params": params},
         )
+    )
+
+    try:
+        data = load_data(data_dir)
+        repo.set_run_inputs_hash(run_id=run_id, inputs_hash=hash_catalog_files(data_dir))
+    except CatalogError as exc:
+        details = {"error": str(exc), **exc.to_dict()}
+        repo.finish_run(run_id=run_id, status="failed", summary={"error": str(exc)})
+        repo.add_audit(
+            **audit_record(
+                actor="orchestrator", action="run.failed", entity="run",
+                entity_id=run_id, details=details,
+            )
+        )
+        log.error("planning run failed: %s", exc, extra={"run_id": run_id})
+        raise
+
+    return run_planning(
+        settings=settings,
+        data=data,
+        run_id=run_id,
+        params=params,
+        requested_by=requested_by,
+    )
+
+
+def run_planning(
+    *,
+    settings: Settings,
+    data: dict[str, Any],
+    horizon_days: int | None = None,
+    service_level: float | None = None,
+    review_period_days: int | None = None,
+    requested_by: str = "api",
+    run_id: str | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if params is None:
+        params = _resolve_params(settings, horizon_days, service_level, review_period_days)
+    if run_id is None:
+        # Legacy standalone path: no pre-created run row. Kept for direct
+        # callers; the API/CLI go through plan_from_catalog instead.
+        run_id = f"run-{uuid.uuid4().hex[:12]}"
+        started = datetime.now(UTC)
+        first_series = next(iter(data.get("demand_history", {}).values()), [])
+        repo.create_run(
+            run_id=run_id,
+            params=params,
+            status="running",
+            started_at=started,
+            inputs_hash=inputs_hash(
+                {
+                    "skus": sorted(data.get("skus", {})),
+                    "params": params,
+                    "demand_days": len(first_series),
+                }
+            ),
+        )
+        repo.add_audit(
+            **audit_record(
+                actor=requested_by,
+                action="run.started",
+                entity="run",
+                entity_id=run_id,
+                details={"params": params},
+            )
+        )
+    log.info("planning run started", extra={"run_id": run_id})
+
+    ctx = PlanningContext(
+        skus=data["skus"],
+        suppliers=data["suppliers"],
+        inventory=data["inventory"],
+        demand_history=data["demand_history"],
+        sku_suppliers=data["sku_suppliers"],
+        params=dict(params),
     )
 
     try:
@@ -98,8 +180,38 @@ def run_planning(
         proc = procurement.findings[0]
         decision_ids = []
         for p in proc["proposals"]:
-            if p["status"] != "proposed":
+            if p["status"] == "blocked":
+                # Blocked proposals are persisted (P1-2), never released.
+                reason = (
+                    p.get("reason")
+                    or "; ".join(p.get("policy_reasons", []))
+                    or "blocked by policy"
+                )
+                did = repo.add_decision(
+                    run_id=run_id,
+                    agent="procurement",
+                    sku_id=p["sku_id"],
+                    kind="replenish",
+                    quantity=p["quantity"],
+                    unit_cost=0.0,
+                    total_cost=0.0,
+                    rationale=reason,
+                    confidence=0.0,
+                    status="blocked",
+                    extra={
+                        "reason": reason,
+                        "supplier_id": p.get("supplier_id"),
+                    },
+                )
+                repo.add_audit(
+                    **audit_record(
+                        actor="policy", action="decision.blocked", entity="decision",
+                        entity_id=str(did),
+                        details={"sku_id": p["sku_id"], "reason": reason},
+                    )
+                )
                 continue
+            needs_human = p["needs_approval"]
             did = repo.add_decision(
                 run_id=run_id,
                 agent="procurement",
@@ -110,12 +222,25 @@ def run_planning(
                 total_cost=p["total_cost"],
                 rationale=_rationale(p),
                 confidence=p["supplier_score"],
-                status="needs_approval" if p["needs_approval"] else "approved",
+                status="needs_approval" if needs_human else "auto_approved",
+                decided_by=None if needs_human else "policy:auto",
                 extra={
                     "supplier_id": p["supplier_id"],
                     "policy_reasons": p["policy_reasons"],
                 },
             )
+            if not needs_human:
+                repo.add_audit(
+                    **audit_record(
+                        actor="policy", action="decision.auto_approved",
+                        entity="decision", entity_id=str(did),
+                        details={
+                            "sku_id": p["sku_id"],
+                            "total_cost": p["total_cost"],
+                            "policy_reasons": p["policy_reasons"],
+                        },
+                    )
+                )
             decision_ids.append(did)
 
         po_ids = []

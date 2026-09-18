@@ -35,11 +35,11 @@ Findings land in the run summary so risk is visible next to the proposed orders.
 
 Scores candidate suppliers per SKU on unit cost (50%), reliability (30%), and lead time (20%), each min-max normalized across the candidates. Only approved suppliers are eligible: the best approved source wins, and if no approved supplier offers a SKU the proposal is blocked with the reason recorded. The policy layer still re-checks approval as a backstop against stale data.
 
-Draft purchase orders group lines by supplier. A PO that would exceed the single-PO cap is split into sequential POs; a single line over the cap is split by quantity. POs at or above the approval threshold are flagged `needs_approval`.
+Draft purchase orders group allowed lines by supplier. A multi-line PO that would exceed the single-PO cap is split into sequential POs; a single unit whose cost alone exceeds the cap can never produce a compliant PO, so that proposal is blocked for human review instead. POs at or above the approval threshold are flagged `needs_approval`.
 
 ## Orchestrator (`agents/orchestrator.py`)
 
-Runs the pipeline in the fixed order forecast, inventory, risk, procurement. It writes the run row, each decision (with rationale, policy verdict, and confidence), draft POs, and audit events. On failure it marks the run `failed` with the error and re-raises.
+Runs the pipeline in the fixed order forecast, inventory, risk, procurement. It creates the run row first (status `running`), then loads the catalog (failures record `failed` + audit and surface 422), then writes each decision (with rationale, policy verdict, and confidence), draft POs, and audit events. On failure it marks the run `failed` with the error and re-raises.
 
 ## Adding an agent
 

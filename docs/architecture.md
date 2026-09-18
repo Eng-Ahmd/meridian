@@ -29,11 +29,11 @@ The orchestrator (`agents/orchestrator.py`) executes the four agents in a fixed 
 
 ## Data flow
 
-1. `POST /v1/runs` loads the catalog from CSV (`data/loader.py`).
-2. The orchestrator creates a `runs` row with status `running` and an inputs hash (SHA-256 of the SKU list, params, and history length) so a run can be tied back to its exact inputs.
+1. `POST /v1/runs` creates a `runs` row with status `running`, then loads the catalog from CSV (`data/loader.py`). A load failure flips the run to `failed` with an audit event and returns 422 naming the file and row — every run attempt is recorded.
+2. The run's inputs hash is SHA-256 over the raw bytes of the five catalog CSVs (sorted by filename) so a run can be tied back to its exact inputs: any byte-level change in costs, inventory, suppliers, or demand produces a different hash.
 3. Forecaster, Inventory, Risk, and Procurement run in order. Procurement receives the inventory findings through the context.
-4. Policy guardrails (`core/policy.py`) evaluate every proposed order: unapproved suppliers are blocked, oversized POs are split, and orders at or above the approval threshold are marked `needs_approval`.
-5. Decisions and draft POs are written with status, rationale, and confidence. The run is marked `succeeded` with a summary; any exception marks it `failed` and is recorded.
+4. Policy guardrails (`core/policy.py`) evaluate every proposed order: unapproved suppliers are blocked, orders whose value (or single-unit cost) exceeds the cap are blocked for human review, large cover quantities are flagged advisory-only ("quantity covers ~N days of forecast horizon; review advised" — quantities are never silently trimmed), and orders at or above the approval threshold are marked `needs_approval`.
+5. Decisions and draft POs are written with status, rationale, and confidence: below-threshold orders persist as `auto_approved` (`decided_by="policy:auto"` plus a `decision.auto_approved` audit event), blocked proposals persist as `blocked` with the reason in `extra` plus a `decision.blocked` audit event. The run is marked `succeeded` with a summary; any exception marks it `failed` and is recorded.
 
 ## Why this shape
 

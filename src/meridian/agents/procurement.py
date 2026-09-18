@@ -84,6 +84,32 @@ class ProcurementAgent(BaseAgent):
             best = approved[0]
             supplier = ctx.suppliers[best["supplier_id"]]
             unit_cost = float(best["unit_cost"])
+            if unit_cost > self.settings.max_single_po_value:
+                # Even a single unit breaches the cap: no quantity split could
+                # ever produce a compliant PO, so block for human review (P1-5).
+                proposals.append(
+                    {
+                        "sku_id": sku_id,
+                        "quantity": qty,
+                        "supplier_id": best["supplier_id"],
+                        "supplier_name": supplier.get("name"),
+                        "unit_cost": unit_cost,
+                        "total_cost": round(qty * unit_cost, 2),
+                        "supplier_score": best["score"],
+                        "allowed": False,
+                        "needs_approval": False,
+                        "policy_reasons": [
+                            f"unit cost ${unit_cost:,.2f} exceeds the single-PO cap "
+                            f"${self.settings.max_single_po_value:,.2f}; escalated for review"
+                        ],
+                        "status": "blocked",
+                        "reason": (
+                            f"unit cost ${unit_cost:,.2f} exceeds the single-PO cap "
+                            f"${self.settings.max_single_po_value:,.2f}; escalated for review"
+                        ),
+                    }
+                )
+                continue
             verdict = evaluate_order(
                 settings=self.settings,
                 supplier_approved=bool(supplier.get("approved", False)),

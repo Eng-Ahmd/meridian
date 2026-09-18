@@ -6,10 +6,11 @@ Meridian plans replenishment and drafts purchase orders. The assets that matter 
 
 ## Controls in place
 
-- **Human-in-the-loop for spend.** Orders at or above `MERIDIAN_APPROVAL_THRESHOLD` cannot be released without an explicit approve call that records the approver. There is no auto-approve path.
-- **Policy guardrails.** Unapproved suppliers are blocked, not skipped; oversized orders are split, not silently trimmed. Blocks are visible in the run summary.
+- **Human-in-the-loop for spend.** Orders at or above `MERIDIAN_APPROVAL_THRESHOLD` cannot be released without an explicit approve call that records the approver. Below-threshold orders are released by policy as `policy:auto` with status `auto_approved` and a `decision.auto_approved` audit event, so they are distinguishable from human approvals. A PO itself can only be approved once every linked decision is `approved` or `auto_approved`; rejecting a decision holds its draft POs (`on_hold`).
+- **Policy guardrails.** Unapproved suppliers are blocked, not skipped; over-cap orders are blocked for human review, not silently trimmed or split into over-cap POs. Blocks are persisted as decisions with reasons and audit events, and are visible in the run summary.
 - **Audit trail.** Every run, decision state change, and PO approval writes an append-style audit event with actor, timestamp, and details.
-- **Secrets handling.** Database credentials and the LLM key arrive via environment variables or a Kubernetes Secret. They are never logged and never appear in API responses.
+- **Secrets handling.** Database credentials and the LLM key arrive via environment variables or a Kubernetes Secret. They are never logged and never appear in API responses. The Docker image ships no credentialed database default; `docker-compose.yml` reads the Postgres password from `MERIDIAN_DB_PASSWORD` and fails fast when it is missing.
+- **Compromised credential note.** The password `meridian` was previously committed in `Dockerfile`/`docker-compose.yml` history. Treat it as compromised: rotate it everywhere it was ever used (local Postgres, shared dev databases, any environment that reused it) and never reuse it.
 - **Non-root containers.** The Docker image and the k8s manifest run as an unprivileged user.
 - **Input validation.** Request bodies are validated with Pydantic; quantities and horizons are range-checked.
 

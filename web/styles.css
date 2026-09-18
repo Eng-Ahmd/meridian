@@ -68,10 +68,10 @@ td.empty { color: var(--muted); text-align: center; padding: 18px; }
   font-size: 12px;
   font-weight: 600;
 }
-.pill.succeeded, .pill.approved { background: #e2f2e8; color: var(--ok); }
+.pill.succeeded, .pill.approved, .pill.auto_approved { background: #e2f2e8; color: var(--ok); }
 .pill.failed, .pill.rejected { background: #fbe4e2; color: var(--bad); }
 .pill.running { background: #e8eefc; color: var(--accent); }
-.pill.needs_approval, .pill.proposed, .pill.draft { background: #fdf1e0; color: var(--warn); }
+.pill.needs_approval, .pill.proposed, .pill.draft, .pill.on_hold, .pill.blocked { background: #fdf1e0; color: var(--warn); }
 @media (max-width: 700px) {
   main { padding: 14px; }
   .topbar { flex-wrap: wrap; }

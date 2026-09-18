@@ -14,12 +14,15 @@ Every setting is an environment variable prefixed with `MERIDIAN_`. A `.env` fil
 | `MERIDIAN_LLM_BASE_URL` | empty | e.g. `https://api.openai.com/v1`. |
 | `MERIDIAN_LLM_API_KEY` | empty | Sent as a bearer token. |
 | `MERIDIAN_LLM_MODEL` | empty | e.g. `gpt-4o-mini` or a self-hosted model name. |
-| `MERIDIAN_MAX_SINGLE_PO_VALUE` | `25000` | A proposed order above this is blocked and split across POs. |
+| `MERIDIAN_MAX_SINGLE_PO_VALUE` | `25000` | A proposed order above this is blocked for human review (never auto-split into over-cap POs). |
 | `MERIDIAN_APPROVAL_THRESHOLD` | `5000` | Orders at or above this value need human approval. |
 | `MERIDIAN_DEFAULT_SERVICE_LEVEL` | `0.95` | Target fill rate used for safety stock. |
 | `MERIDIAN_FORECAST_HORIZON_DAYS` | `30` | Default planning horizon. |
 | `MERIDIAN_REVIEW_PERIOD_DAYS` | `7` | Days of demand covered beyond lead time. |
-| `MERIDIAN_SEED_SAMPLE_DATA` | `true` | Reserved for future DB seeding; the CSV catalog ships in `data/`. |
+
+`MERIDIAN_LOG_LEVEL` accepts only `DEBUG`, `INFO`, `WARNING`, `ERROR`; anything else fails fast at startup.
+
+Docker Compose additionally requires `MERIDIAN_DB_PASSWORD` in the environment (the Postgres password); compose fails fast with a clear message when it is missing. The password is never baked into the image.
 
 ## Tuning the policy guardrails
 
